@@ -127,16 +127,31 @@ export default function EmailSimulator() {
   const [currentIndex, setCurrentIndex] = useState(0);
 
   const [feedback, setFeedback] = useState(null);
-  const [totalAnswered, setTotalAnswered] = useState(0);
-  const [correctAnswers, setCorrectAnswers] = useState(0);
-  const [correctPhishing, setCorrectPhishing] = useState(0);
   const [answered, setAnswered] = useState(false);
+
+  // история результатов по письмам в текущем цикле
+  // { emailId, result: 'correct' | 'wrong' | 'skipped' }
+  const [results, setResults] = useState([]);
 
   const currentEmail = sequence[currentIndex];
   const totalPhishingInPool = useMemo(
     () => EMAIL_TEMPLATES.filter((e) => e.isPhishing).length,
     []
   );
+
+  const applyAnswer = (type, userThinksPhishing = null) => {
+    const alreadyHas = results.find((r) => r.emailId === currentEmail.id);
+    if (alreadyHas) return; // на одно письмо только один итог
+
+    setResults((prev) => [
+      ...prev,
+      {
+        emailId: currentEmail.id,
+        result: type,
+        userAnswer: userThinksPhishing
+      }
+    ]);
+  };
 
   const handleAnswer = (userThinksPhishing) => {
     if (answered) return;
@@ -146,18 +161,26 @@ export default function EmailSimulator() {
     setFeedback({
       correct: isCorrect,
       explanation: currentEmail.explanation,
-      userAnswer: userThinksPhishing
+      userAnswer: userThinksPhishing,
+      skipped: false
     });
 
     setAnswered(true);
-    setTotalAnswered((prev) => prev + 1);
+    applyAnswer(isCorrect ? 'correct' : 'wrong', userThinksPhishing);
+  };
 
-    if (isCorrect) {
-      setCorrectAnswers((prev) => prev + 1);
-      if (currentEmail.isPhishing) {
-        setCorrectPhishing((prev) => prev + 1);
-      }
-    }
+  const handleSkip = () => {
+    if (answered) return;
+
+    setFeedback({
+      correct: false,
+      explanation: 'Письмо пропущено. В реальной жизни это может быть как безопасно, так и рискованно — важно уметь принимать решение.',
+      userAnswer: null,
+      skipped: true
+    });
+
+    setAnswered(true);
+    applyAnswer('skipped', null);
   };
 
   const nextEmail = () => {
@@ -167,16 +190,11 @@ export default function EmailSimulator() {
     setCurrentIndex((prevIndex) => {
       const nextIndex = prevIndex + 1;
 
-      // если прошли ВСЕ письма — начинаем новый цикл и СБРАСЫВАЕМ статистику
+      // конец цикла — сбрасываем всё и начинаем новый с другой последовательностью
       if (nextIndex >= sequence.length) {
         const newSeq = shuffleArray(EMAIL_TEMPLATES);
         setSequence(newSeq);
-
-        // сброс статистики после завершения «прохода»
-        setTotalAnswered(0);
-        setCorrectAnswers(0);
-        setCorrectPhishing(0);
-
+        setResults([]); // полный сброс итогов цикла
         return 0;
       }
 
@@ -184,11 +202,27 @@ export default function EmailSimulator() {
     });
   };
 
+  const prevEmail = () => {
+    // «Назад» без изменения статистики (письмо уже оценено или ещё нет)
+    setFeedback(null);
+    setAnswered(!!results.find((r) => r.emailId === sequence[Math.max(currentIndex - 1, 0)].id));
+
+    setCurrentIndex((prevIndex) => {
+      if (prevIndex === 0) return 0;
+      return prevIndex - 1;
+    });
+  };
+
+  // агрегируем результаты цикла
+  const correctCount = results.filter((r) => r.result === 'correct').length;
+  const wrongCount = results.filter((r) => r.result === 'wrong').length;
+  const skippedCount = results.filter((r) => r.result === 'skipped').length;
+
   return (
     <div className="max-w-2xl mx-auto">
       <h2 className="text-4xl font-bold text-center mb-4">Почтовый тренажёр</h2>
       <p className="text-center text-gray-600 mb-8">
-        В каждом цикле вы просматриваете 10 писем в случайном порядке. После полного прохода статистика сбрасывается и начинается новый цикл.
+        В цикле 10 писем в случайном порядке. Можно отвечать, пропускать и смотреть сводку по правильным, неправильным и пропущенным.
       </p>
 
       {/* Письмо */}
@@ -216,7 +250,7 @@ export default function EmailSimulator() {
       </div>
 
       {/* Кнопки выбора */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
         <button
           onClick={() => handleAnswer(true)}
           disabled={answered}
@@ -239,47 +273,89 @@ export default function EmailSimulator() {
         >
           Обычное письмо
         </button>
+        <button
+          onClick={handleSkip}
+          disabled={answered}
+          className={`w-full py-3 px-4 rounded-2xl font-semibold ${
+            answered
+              ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
+              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+          }`}
+        >
+          Пропустить
+        </button>
       </div>
 
       {/* Обратная связь */}
       {feedback && (
         <div
           className={`mt-4 p-6 rounded-2xl border-4 ${
-            feedback.correct
+            feedback.skipped
+              ? 'bg-yellow-50 border-yellow-400'
+              : feedback.correct
               ? 'bg-green-100 border-safe'
               : 'bg-red-100 border-phishing'
           }`}
         >
           <h3
             className={`font-bold text-2xl mb-2 ${
-              feedback.correct ? 'text-safe' : 'text-phishing'
+              feedback.skipped
+                ? 'text-yellow-700'
+                : feedback.correct
+                ? 'text-safe'
+                : 'text-phishing'
             }`}
           >
-            {feedback.correct ? '✅ Верно!' : '❌ Неверно'}
+            {feedback.skipped
+              ? '⏭ Письмо пропущено'
+              : feedback.correct
+              ? '✅ Верно!'
+              : '❌ Неверно'}
           </h3>
           <p className="mb-2">{feedback.explanation}</p>
-          <p className="text-sm text-gray-600">
-            Ваш ответ: {feedback.userAnswer ? '«Фишинг»' : '«Обычное письмо»'}.
-          </p>
+          {!feedback.skipped && (
+            <p className="text-sm text-gray-600">
+              Ваш ответ: {feedback.userAnswer ? '«Фишинг»' : '«Обычное письмо»'}.
+            </p>
+          )}
         </div>
       )}
 
-      {/* Следующее письмо + прогресс в цикле */}
-      <div className="mt-6 text-center">
+      {/* Навигация: назад / вперёд */}
+      <div className="mt-6 flex justify-between items-center">
+        <button
+          onClick={prevEmail}
+          disabled={currentIndex === 0}
+          className={`px-4 py-2 rounded-2xl border text-sm font-medium ${
+            currentIndex === 0
+              ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed'
+              : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+          }`}
+        >
+          ← Назад
+        </button>
+
+        <span className="text-sm text-gray-500">
+          Письмо {currentIndex + 1} из {sequence.length}
+        </span>
+
         <button
           onClick={nextEmail}
-          className="inline-flex items-center px-6 py-2 rounded-2xl border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 text-sm font-medium"
+          className="px-4 py-2 rounded-2xl border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 text-sm font-medium"
         >
-          Следующее письмо ({currentIndex + 1}/{sequence.length})
+          Следующее →
         </button>
       </div>
 
       {/* Итоги текущего цикла */}
       <div className="mt-8 bg-white rounded-2xl shadow p-6 text-sm text-gray-700">
-        <h4 className="font-semibold mb-2">Итоги текущего цикла</h4>
-        <p>Всего ответов в этом цикле: {totalAnswered}</p>
-        <p>Правильных ответов: {correctAnswers}</p>
-        <p>
+        <h4 className="font-semibold mb-2">Итоги текущего цикла (10 писем)</h4>
+        <p>Всего писем в цикле: {sequence.length}</p>
+        <p>Отвечено (включая пропуски): {results.length}</p>
+        <p>Правильных ответов: {correctCount}</p>
+        <p>Неправильных ответов: {wrongCount}</p>
+        <p>Пропущено писем: {skippedCount}</p>
+        <p className="mt-1">
           Правильно найдено фишинговых писем: {correctPhishing} из {totalPhishingInPool}
         </p>
       </div>
