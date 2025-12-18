@@ -1,36 +1,40 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 
-const EMAILS = [
+const EMAIL_TEMPLATES = [
+  // 1. Классический банк-фишинг
   {
     id: 1,
     from: 'support@bankk.ru',
     to: 'you@company.com',
     subject: 'СРОЧНО! Обновите пароль',
-    body: 'Уважаемый клиент! Ваш аккаунт заблокирован. Срочно перейдите по ссылке и введите данные карты.',
-    attachment: 'attachment.exe',
+    body: 'Уважаемый клиент! Ваш аккаунт заблокирован. Срочно перейдите по ссылке и введите данные карты для разблокировки.',
+    attachment: 'secure_update.exe',
     isPhishing: true,
-    explanation: 'Подозрительный домен, срочность, запрос данных + .exe вложение.'
+    explanation: 'Подозрительный домен, срочность, запрос данных карты и .exe вложение.'
   },
+  // 2. Легитимная рассылка HR
   {
     id: 2,
-    from: 'no-reply@company.com',
+    from: 'hr@company.com',
     to: 'you@company.com',
-    subject: 'График корпоративных мероприятий',
-    body: 'Коллеги, во вложении — план мероприятий на следующий месяц. Если есть вопросы, пишите HR.',
-    attachment: 'events.pdf',
+    subject: 'Обновление политики отпуска на 2025 год',
+    body: 'Коллеги, во вложении — обновлённая политика отпусков. Пожалуйста, ознакомьтесь в удобное время.',
+    attachment: 'vacation_policy_2025.pdf',
     isPhishing: false,
-    explanation: 'Легитимный корпоративный домен, нет срочности, адекватное содержание, PDF.'
+    explanation: 'Официальный домен компании, отсутствие срочности и запросов чувствительных данных, PDF-документ.'
   },
+  // 3. Поддельный «служба безопасности»
   {
     id: 3,
     from: 'security@pay-service.com',
     to: 'you@company.com',
-    subject: 'Подтверждение входа',
-    body: 'Мы заметили вход из нового устройства. Если это были не вы — перейдите по ссылке для отмены операции.',
+    subject: 'Подтверждение подозрительной транзакции',
+    body: 'Мы заметили подозрительную транзакцию. Если это были не вы, немедленно перейдите по ссылке и введите данные карты.',
     attachment: null,
     isPhishing: true,
-    explanation: 'Неясный домен, ссылка на «отмену» без деталей, классический фишинг-антифрод.'
+    explanation: 'Неясный домен, давление срочностью, запрос введения данных карты через ссылку.'
   },
+  // 4. Легитимное ИТ-уведомление
   {
     id: 4,
     from: 'it-support@company.com',
@@ -39,23 +43,102 @@ const EMAILS = [
     body: 'Сегодня с 19:00 до 21:00 возможны кратковременные перебои в работе почты. Никаких действий от вас не требуется.',
     attachment: null,
     isPhishing: false,
-    explanation: 'Официальный домен, информирование без ссылок и запросов данных.'
+    explanation: 'Официальный домен ИТ, информирование без ссылок и запросов учётных данных.'
+  },
+  // 5. «Подарок» за опрос
+  {
+    id: 5,
+    from: 'promo@onlineshop-win.com',
+    to: 'you@company.com',
+    subject: 'Вы выиграли подарок за участие в опросе!',
+    body: 'Поздравляем! Пройдите короткий опрос и введите данные карты для получения кэшбэка.',
+    attachment: null,
+    isPhishing: true,
+    explanation: 'Незнакомый домен, обещание приза, запрос данных карты — типичный baiting/фишинг.'
+  },
+  // 6. Легитимное письмо коллеги
+  {
+    id: 6,
+    from: 'kollega@company.com',
+    to: 'you@company.com',
+    subject: 'Презентация для завтрашней встречи',
+    body: 'Привет! Во вложении черновая презентация, посмотри, пожалуйста, когда будет время.',
+    attachment: 'presentation_draft.pptx',
+    isPhishing: false,
+    explanation: 'Внутренний адрес, рабочий контекст, нормальный формат файла, нет ссылок и срочности.'
+  },
+  // 7. Поддельный «администратор почты»
+  {
+    id: 7,
+    from: 'admin@mail-support.com',
+    to: 'you@company.com',
+    subject: 'Превышен лимит почтового ящика',
+    body: 'Ваш почтовый ящик почти переполнен. Чтобы не потерять письма, войдите в систему по ссылке и подтвердите логин и пароль.',
+    attachment: null,
+    isPhishing: true,
+    explanation: 'Домен не совпадает с корпоративным, есть ссылка на «вход» и запрос логина/пароля.'
+  },
+  // 8. Легитимное уведомление от сервиса
+  {
+    id: 8,
+    from: 'no-reply@calendar-service.com',
+    to: 'you@company.com',
+    subject: 'Напоминание о встрече',
+    body: 'Напоминаем о встрече сегодня в 15:00. Это автоматическое уведомление, не отвечайте на него.',
+    attachment: null,
+    isPhishing: false,
+    explanation: 'Типичное сервисное уведомление, нет ссылок для ввода данных, стандартный текст.'
+  },
+  // 9. Фишинг в стиле «руководитель»
+  {
+    id: 9,
+    from: 'ceo-company@outlook.com',
+    to: 'you@company.com',
+    subject: 'Срочно перевести деньги партнёру',
+    body: 'Срочно переведи 300 000 руб. на указанный счёт. Потом объясню, не отвечай никому об этом.',
+    attachment: null,
+    isPhishing: true,
+    explanation: 'Подмена личности руководителя, срочность, запрос денежного перевода, внешний домен.'
+  },
+  // 10. Легитимный бухгалтерский запрос
+  {
+    id: 10,
+    from: 'buhgalter@company.com',
+    to: 'you@company.com',
+    subject: 'Сверка по командировочным',
+    body: 'Коллеги, пришлите, пожалуйста, чеки за последнюю командировку до пятницы. Файлы можно приложить ответным письмом.',
+    attachment: null,
+    isPhishing: false,
+    explanation: 'Внутренний адрес, нормальный рабочий запрос, нет ссылок и требований вводить конфиденциальные данные на стороннем сайте.'
   }
 ];
 
+function shuffleArray(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
 export default function EmailSimulator() {
+  const [sequence, setSequence] = useState(() => shuffleArray(EMAIL_TEMPLATES));
   const [currentIndex, setCurrentIndex] = useState(0);
+
   const [feedback, setFeedback] = useState(null);
   const [totalAnswered, setTotalAnswered] = useState(0);
   const [correctAnswers, setCorrectAnswers] = useState(0);
   const [correctPhishing, setCorrectPhishing] = useState(0);
-  const [answered, setAnswered] = useState(false); // новый флаг
+  const [answered, setAnswered] = useState(false);
 
-  const currentEmail = EMAILS[currentIndex];
-  const totalPhishing = EMAILS.filter((e) => e.isPhishing).length;
+  const currentEmail = sequence[currentIndex];
+  const totalPhishingInPool = useMemo(
+    () => EMAIL_TEMPLATES.filter((e) => e.isPhishing).length,
+    []
+  );
 
   const handleAnswer = (userThinksPhishing) => {
-    // если уже был ответ на это письмо — игнорируем повтор
     if (answered) return;
 
     const isCorrect = userThinksPhishing === currentEmail.isPhishing;
@@ -66,7 +149,7 @@ export default function EmailSimulator() {
       userAnswer: userThinksPhishing
     });
 
-    setAnswered(true); // помечаем, что ответ на это письмо уже дан
+    setAnswered(true);
     setTotalAnswered((prev) => prev + 1);
 
     if (isCorrect) {
@@ -79,15 +162,33 @@ export default function EmailSimulator() {
 
   const nextEmail = () => {
     setFeedback(null);
-    setAnswered(false); // разрешаем отвечать на новое письмо
-    setCurrentIndex((prev) => (prev + 1) % EMAILS.length);
+    setAnswered(false);
+
+    setCurrentIndex((prevIndex) => {
+      const nextIndex = prevIndex + 1;
+
+      // если прошли ВСЕ письма — начинаем новый цикл и СБРАСЫВАЕМ статистику
+      if (nextIndex >= sequence.length) {
+        const newSeq = shuffleArray(EMAIL_TEMPLATES);
+        setSequence(newSeq);
+
+        // сброс статистики после завершения «прохода»
+        setTotalAnswered(0);
+        setCorrectAnswers(0);
+        setCorrectPhishing(0);
+
+        return 0;
+      }
+
+      return nextIndex;
+    });
   };
 
   return (
     <div className="max-w-2xl mx-auto">
-      <h2 className="text-4xl font-bold text-center mb-4">Проверьте письма</h2>
+      <h2 className="text-4xl font-bold text-center mb-4">Почтовый тренажёр</h2>
       <p className="text-center text-gray-600 mb-8">
-        Определите, какое письмо фишинговое, а какое — обычное рабочее.
+        В каждом цикле вы просматриваете 10 писем в случайном порядке. После полного прохода статистика сбрасывается и начинается новый цикл.
       </p>
 
       {/* Письмо */}
@@ -140,7 +241,7 @@ export default function EmailSimulator() {
         </button>
       </div>
 
-      {/* Обратная связь по текущему письму */}
+      {/* Обратная связь */}
       {feedback && (
         <div
           className={`mt-4 p-6 rounded-2xl border-4 ${
@@ -163,23 +264,23 @@ export default function EmailSimulator() {
         </div>
       )}
 
-      {/* Кнопка следующего письма */}
+      {/* Следующее письмо + прогресс в цикле */}
       <div className="mt-6 text-center">
         <button
           onClick={nextEmail}
           className="inline-flex items-center px-6 py-2 rounded-2xl border border-gray-300 bg-white hover:bg-gray-50 text-gray-700 text-sm font-medium"
         >
-          Следующее письмо ({currentIndex + 1}/{EMAILS.length})
+          Следующее письмо ({currentIndex + 1}/{sequence.length})
         </button>
       </div>
 
-      {/* Итоги тренировки */}
+      {/* Итоги текущего цикла */}
       <div className="mt-8 bg-white rounded-2xl shadow p-6 text-sm text-gray-700">
-        <h4 className="font-semibold mb-2">Итоги тренировки</h4>
-        <p>Всего ответов: {totalAnswered}</p>
+        <h4 className="font-semibold mb-2">Итоги текущего цикла</h4>
+        <p>Всего ответов в этом цикле: {totalAnswered}</p>
         <p>Правильных ответов: {correctAnswers}</p>
         <p>
-          Правильно найдено фишинговых писем: {correctPhishing} из {totalPhishing}
+          Правильно найдено фишинговых писем: {correctPhishing} из {totalPhishingInPool}
         </p>
       </div>
     </div>
