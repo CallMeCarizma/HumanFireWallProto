@@ -46,22 +46,38 @@ const EMAILS = [
 export default function EmailSimulator() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [feedback, setFeedback] = useState(null);
+  const [totalAnswered, setTotalAnswered] = useState(0);
+  const [correctAnswers, setCorrectAnswers] = useState(0);
+  const [correctPhishing, setCorrectPhishing] = useState(0);
 
   const currentEmail = EMAILS[currentIndex];
 
   const handleAnswer = (userThinksPhishing) => {
     const isCorrect = userThinksPhishing === currentEmail.isPhishing;
+
     setFeedback({
       correct: isCorrect,
       explanation: currentEmail.explanation,
       userAnswer: userThinksPhishing
     });
+
+    // обновляем общую статистику
+    setTotalAnswered((prev) => prev + 1);
+    if (isCorrect) {
+      setCorrectAnswers((prev) => prev + 1);
+      // отдельно считаем правильно найденные фишинговые письма
+      if (currentEmail.isPhishing) {
+        setCorrectPhishing((prev) => prev + 1);
+      }
+    }
   };
 
   const nextEmail = () => {
     setFeedback(null);
     setCurrentIndex((prev) => (prev + 1) % EMAILS.length);
   };
+
+  const totalPhishing = EMAILS.filter((e) => e.isPhishing).length;
 
   return (
     <div className="max-w-2xl mx-auto">
@@ -110,7 +126,7 @@ export default function EmailSimulator() {
         </button>
       </div>
 
-      {/* Обратная связь */}
+      {/* Обратная связь по текущему письму */}
       {feedback && (
         <div
           className={`mt-4 p-6 rounded-2xl border-4 ${
@@ -133,7 +149,7 @@ export default function EmailSimulator() {
         </div>
       )}
 
-      {/* Следующее письмо */}
+      {/* Кнопка следующего письма */}
       <div className="mt-6 text-center">
         <button
           onClick={nextEmail}
@@ -141,6 +157,16 @@ export default function EmailSimulator() {
         >
           Следующее письмо ({currentIndex + 1}/{EMAILS.length})
         </button>
+      </div>
+
+      {/* Итоги тренировки */}
+      <div className="mt-8 bg-white rounded-2xl shadow p-6 text-sm text-gray-700">
+        <h4 className="font-semibold mb-2">Итоги тренировки</h4>
+        <p>Всего ответов: {totalAnswered}</p>
+        <p>Правильных ответов: {correctAnswers}</p>
+        <p>
+          Правильно найдено фишинговых писем: {correctPhishing} из {totalPhishing}
+        </p>
       </div>
     </div>
   );
