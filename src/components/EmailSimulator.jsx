@@ -49,10 +49,15 @@ export default function EmailSimulator() {
   const [totalAnswered, setTotalAnswered] = useState(0);
   const [correctAnswers, setCorrectAnswers] = useState(0);
   const [correctPhishing, setCorrectPhishing] = useState(0);
+  const [answered, setAnswered] = useState(false); // новый флаг
 
   const currentEmail = EMAILS[currentIndex];
+  const totalPhishing = EMAILS.filter((e) => e.isPhishing).length;
 
   const handleAnswer = (userThinksPhishing) => {
+    // если уже был ответ на это письмо — игнорируем повтор
+    if (answered) return;
+
     const isCorrect = userThinksPhishing === currentEmail.isPhishing;
 
     setFeedback({
@@ -61,11 +66,11 @@ export default function EmailSimulator() {
       userAnswer: userThinksPhishing
     });
 
-    // обновляем общую статистику
+    setAnswered(true); // помечаем, что ответ на это письмо уже дан
     setTotalAnswered((prev) => prev + 1);
+
     if (isCorrect) {
       setCorrectAnswers((prev) => prev + 1);
-      // отдельно считаем правильно найденные фишинговые письма
       if (currentEmail.isPhishing) {
         setCorrectPhishing((prev) => prev + 1);
       }
@@ -74,10 +79,9 @@ export default function EmailSimulator() {
 
   const nextEmail = () => {
     setFeedback(null);
+    setAnswered(false); // разрешаем отвечать на новое письмо
     setCurrentIndex((prev) => (prev + 1) % EMAILS.length);
   };
-
-  const totalPhishing = EMAILS.filter((e) => e.isPhishing).length;
 
   return (
     <div className="max-w-2xl mx-auto">
@@ -114,13 +118,23 @@ export default function EmailSimulator() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
         <button
           onClick={() => handleAnswer(true)}
-          className="w-full bg-phishing text-white py-3 px-4 rounded-2xl font-semibold hover:bg-red-600"
+          disabled={answered}
+          className={`w-full py-3 px-4 rounded-2xl font-semibold ${
+            answered
+              ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+              : 'bg-phishing text-white hover:bg-red-600'
+          }`}
         >
           Это фишинг
         </button>
         <button
           onClick={() => handleAnswer(false)}
-          className="w-full bg-green-500 text-white py-3 px-4 rounded-2xl font-semibold hover:bg-green-600"
+          disabled={answered}
+          className={`w-full py-3 px-4 rounded-2xl font-semibold ${
+            answered
+              ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+              : 'bg-green-500 text-white hover:bg-green-600'
+          }`}
         >
           Обычное письмо
         </button>
